@@ -23,6 +23,7 @@ def _ensure_seed():
     if not STORE.get_all():
         seeds = [
             Event(id="seed-1", title="Pale blue rift above Fremont", description="Multiple reports of a vertical shimmering rift approximately 8 stories tall. Lasted ~6 minutes. No seismic or weather data.", lat=47.66, lon=-122.35, source="internet", timestamp="2026-06-14T03:11:00Z", tags=["visual","internet"], fracture_score=78.0),
+            Event(id="seed-1b", title="Companion sighting 1.8km away", description="Another witness 1.8 km south reported identical column + humming. Same timestamp.", lat=47.645, lon=-122.33, source="internet", timestamp="2026-06-14T03:12:00Z", tags=["visual"], fracture_score=71.0),
             Event(id="seed-2", title="Repeated sky echo", description="Witness heard own voice repeat 4s delayed while looking at clear sky. Recorded on two phones.", lat=34.05, lon=-118.25, source="user", timestamp="2026-06-18T01:40:00Z", tags=["auditory"], fracture_score=64.0),
             Event(id="seed-3", title="Sensor spike + visual distortion", description="Tri-band magnetometer + camera both registered transient at same second. Object appeared briefly in frame then gone.", lat=51.51, lon=-0.12, source="local", timestamp="2026-06-20T22:05:00Z", tags=["sensor","em"], fracture_score=82.0),
         ]
