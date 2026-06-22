@@ -37,7 +37,7 @@ class PortalDetector:
     Groups nearby high-scoring events and computes a portal likelihood.
     """
 
-    def __init__(self, max_dist_km: float = 42.0, min_events: int = 3, min_avg_score: float = 28.0):
+    def __init__(self, max_dist_km: float = 42.0, min_events: int = 2, min_avg_score: float = 22.0):
         self.max_dist_km = max_dist_km
         self.min_events = min_events
         self.min_avg_score = min_avg_score
