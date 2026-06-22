@@ -106,23 +106,34 @@ rift/
 │   ├── events.py     # Event model, persistence, scoring
 │   ├── scanner.py    # Web intelligence + local ingest
 │   └── detector.py   # Clustering + portal identification
+├── integrations/
+│   └── judge.py      # Bridge to Wold Labs Judge (import reports, export manifests)
 └── web/
     ├── app.py        # Flask API + server
     └── templates/
         └── index.html  # Leaflet map + dark rift UI
 ```
 
-Extensible: Add real search providers to `scanner.py` (SerpAPI, NewsAPI, X/Twitter API, RSS feeds, etc.). The simulated feed is designed to be swapped.
+Extensible: Add real search providers to `scanner.py`. Upload Judge report JSONs — they are auto-converted and placed on the map (you supply the default lat/lon for the media location).
 
-## Future / Roadmap Ideas
+## Rift + Judge Workflow (Recommended)
 
-- Real-time X / news feed connectors
-- Image upload + basic visual anomaly hints (tie into Judge)
-- Timeline scrubber
-- Heatmap + path tracing of moving anomalies
-- Export annotated KML / GPX
-- Multi-user collaborative sessions
-- Integration with Wold Labs Judge for deeper media forensics on uploaded clips
+1. Use Rift to aggregate sightings, run web scans, and visually cluster high-fracture zones on the map.
+2. For promising locations, record video, audio, and sensor logs.
+3. Analyze the raw media with **Judge** (https://github.com/woldlabs/Judge) for rigorous multimodal anomaly detection.
+4. Upload the resulting `demo_report.json` (or your report) back into Rift. Judge-detected events appear as map pins with modality tags and scores.
+5. Export a "for Judge" manifest from Rift to document what media to collect.
+
+```python
+# Example (after pip install -e ../Judge or from the package)
+from rift.integrations.judge import import_judge_report, prepare_for_judge
+
+judge_report = json.load(open("judge_report.json"))
+rift_events = import_judge_report(judge_report, default_lat=47.66, default_lon=-122.35)
+# ... add to store or map
+
+manifest = prepare_for_judge(your_rift_events)
+```
 
 ## License
 

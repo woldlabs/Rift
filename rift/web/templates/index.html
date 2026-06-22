@@ -213,6 +213,21 @@
                     <small>or click to choose</small>
                     <input type="file" id="file-input" style="display:none" accept=".json,.csv,.txt">
                 </div>
+                <div style="margin-top:6px;font-size:10px;color:#666">
+                    Judge reports (.json) auto-converted when uploaded.
+                </div>
+            </div>
+
+            <!-- Judge Integration -->
+            <div class="panel">
+                <h3>Judge Integration</h3>
+                <div style="font-size:11px; line-height:1.3; color:#aaa; margin-bottom:6px;">
+                    Rift finds <em>where</em>. Use <strong>Judge</strong> for deep analysis of video/audio/sensor from those locations.
+                </div>
+                <button id="btn-judge-export" style="width:100%; margin-bottom:4px;">EXPORT FOR JUDGE</button>
+                <div style="font-size:10px;color:#666">
+                    Upload a Judge report JSON (or use the Local Data drop zone — it auto-detects).
+                </div>
             </div>
 
             <!-- Filters -->
@@ -529,6 +544,17 @@
             document.getElementById('btn-clear').onclick = clearAll;
             document.getElementById('btn-add').onclick = addObservation;
             document.getElementById('btn-export').onclick = () => { window.location = '/api/export'; };
+            const jexp = document.getElementById('btn-judge-export');
+            if (jexp) jexp.onclick = async () => {
+                const res = await fetch('/api/export');
+                const blob = await res.blob();
+                // For now just download the Rift session; user can use prepare_for_judge offline or future endpoint
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'rift_for_judge.json';
+                a.click();
+                alert('Downloaded current session. Use rift.integrations.judge.prepare_for_judge() or attach media and run Judge on the locations shown.');
+            };
 
             // filter listeners
             ['f-internet','f-local','f-user','score-slider','search-box'].forEach(id => {

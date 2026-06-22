@@ -1,9 +1,8 @@
 """Portal and cluster detection for Rift."""
 from __future__ import annotations
 import math
-from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Any
+from typing import List, Dict, Any
 
 from .events import Event
 
@@ -46,28 +45,43 @@ class PortalDetector:
         if len(events) < self.min_events:
             return []
 
-        clusters: List[List[Event]] = []
-        used = set()
-
-        for i, e in enumerate(events):
-            if i in used or e.fracture_score < self.min_avg_score:
+        # Build adjacency: indices of events within distance (full connected components)
+        n = len(events)
+        adj = [[] for _ in range(n)]
+        for i in range(n):
+            if events[i].fracture_score < self.min_avg_score:
                 continue
-            cluster = [e]
-            used.add(i)
-            for j, other in enumerate(events):
-                if j in used or j == i:
+            for j in range(i + 1, n):
+                if events[j].fracture_score < self.min_avg_score:
                     continue
-                if other.fracture_score < self.min_avg_score:
-                    continue
-                dist = haversine(e.lat, e.lon, other.lat, other.lon)
-                if dist <= self.max_dist_km:
-                    cluster.append(other)
-                    used.add(j)
-            if len(cluster) >= self.min_events:
-                clusters.append(cluster)
+                if haversine(events[i].lat, events[i].lon, events[j].lat, events[j].lon) <= self.max_dist_km:
+                    adj[i].append(j)
+                    adj[j].append(i)
+
+        # DFS / flood fill for components
+        visited = [False] * n
+        raw_clusters: List[List[Event]] = []
+
+        def dfs(start: int, comp: List[int]):
+            stack = [start]
+            visited[start] = True
+            while stack:
+                u = stack.pop()
+                comp.append(u)
+                for v in adj[u]:
+                    if not visited[v]:
+                        visited[v] = True
+                        stack.append(v)
+
+        for i in range(n):
+            if not visited[i] and events[i].fracture_score >= self.min_avg_score:
+                comp_idx: List[int] = []
+                dfs(i, comp_idx)
+                if len(comp_idx) >= self.min_events:
+                    raw_clusters.append([events[k] for k in comp_idx])
 
         result = []
-        for cl in clusters:
+        for cl in raw_clusters:
             lats = [ev.lat for ev in cl]
             lons = [ev.lon for ev in cl]
             center_lat = sum(lats) / len(lats)
