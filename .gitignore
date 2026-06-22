@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# Rift runtime
+rift_session.json
+*.log
+reports/
+
+# OS
+.DS_Store
+Thumbs.db
