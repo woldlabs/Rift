@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RIFT • Reality Integrity & Fracture Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg: #0a0a12;
+            --panel: #12121c;
+            --accent: #7b2cbf;
+            --accent2: #00f0ff;
+            --text: #e0e0ff;
+            --muted: #8a8aa0;
+            --danger: #ff4d6d;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Segoe UI', system_ui, sans-serif; }
+        body { display: flex; flex-direction: column; }
+        
+        header {
+            background: #0f0f1a;
+            border-bottom: 1px solid #222233;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 100;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 3px;
+        }
+        .logo .rift {
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .tagline { font-size: 13px; color: var(--muted); margin-top: -4px; }
+
+        .main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        #map {
+            flex: 1;
+            min-width: 0;
+            background: #111;
+        }
+
+        .sidebar {
+            width: 340px;
+            background: var(--panel);
+            border-left: 1px solid #222233;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel {
+            padding: 14px 16px;
+            border-bottom: 1px solid #1f1f2e;
+        }
+        .panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 13px;
+            letter-spacing: 1px;
+            color: var(--accent2);
+            text-transform: uppercase;
+        }
+
+        button {
+            background: #1f1f2e;
+            color: var(--text);
+            border: 1px solid #333344;
+            padding: 9px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all .1s ease;
+        }
+        button:hover { background: #29293a; border-color: var(--accent); }
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        button.primary:hover { filter: brightness(1.15); }
+        button.danger { border-color: var(--danger); color: #ff9aa8; }
+
+        .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+        .controls button { flex: 1; min-width: 110px; }
+
+        .statbar {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+        }
+        .stat { background: #1a1a26; padding: 4px 10px; border-radius: 4px; }
+        .stat span { color: var(--accent2); font-weight: 600; }
+
+        #event-list {
+            flex: 1;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+        .event-item {
+            padding: 10px 14px;
+            border-bottom: 1px solid #1f1f2e;
+            cursor: pointer;
+        }
+        .event-item:hover { background: #1a1a26; }
+        .event-item .title { font-weight: 600; }
+        .event-item .meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; margin-top: 2px; }
+        .score { padding: 1px 6px; border-radius: 3px; font-size: 11px; background: #222233; }
+        .score.high { background: #3a1f2f; color: #ff8a9e; }
+        .score.med { background: #2f2f1f; color: #f0d070; }
+
+        .filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .filters label { font-size: 12px; display: flex; align-items: center; gap: 4px; color: var(--muted); }
+        input[type="range"] { accent-color: var(--accent); }
+
+        .upload-area {
+            border: 2px dashed #333344;
+            border-radius: 6px;
+            padding: 14px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--muted);
+            cursor: pointer;
+        }
+        .upload-area:hover { border-color: var(--accent); }
+
+        .footer {
+            padding: 8px 14px;
+            font-size: 11px;
+            color: var(--muted);
+            background: #0f0f1a;
+            border-top: 1px solid #222233;
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: #1a1a26;
+            color: #ddd;
+            border: 1px solid #333344;
+        }
+        .leaflet-popup-tip { background: #1a1a26; }
+        .marker-label {
+            font-size: 11px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <div class="logo">
+                <span>RIFT</span>
+                <span class="rift">∴</span>
+            </div>
+            <div class="tagline">Reality Integrity &amp; Fracture Tracker — Wold Labs</div>
+        </div>
+        <div style="text-align:right; font-size:12px; color:#888">
+            <div>PORTALS • GLITCHES • RIFTS</div>
+            <div id="header-stats" style="margin-top:2px"></div>
+        </div>
+    </header>
+
+    <div class="main">
+        <!-- MAP -->
+        <div id="map"></div>
+
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <!-- Actions -->
+            <div class="panel">
+                <h3>Intelligence Feed</h3>
+                <div class="controls">
+                    <button id="btn-scan" class="primary">SCAN THE WEB</button>
+                    <button id="btn-portals">DETECT PORTALS</button>
+                    <button id="btn-clear" class="danger">CLEAR + RESEED</button>
+                </div>
+            </div>
+
+            <!-- Add manual -->
+            <div class="panel">
+                <h3>Add Observation</h3>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    <input id="add-title" type="text" placeholder="Title (e.g. Vertical light pillar)" style="width:100%; background:#1a1a26; border:1px solid #333; color:#ddd; padding:7px; border-radius:4px;">
+                    <textarea id="add-desc" placeholder="Description..." rows="2" style="width:100%; background:#1a1a26; border:1px solid #333; color:#ddd; padding:7px; border-radius:4px; font-size:12px;"></textarea>
+                    <div style="display:flex; gap:6px;">
+                        <input id="add-lat" type="text" placeholder="Lat" style="flex:1; background:#1a1a26; border:1px solid #333; color:#ddd; padding:7px; border-radius:4px; font-size:12px;">
+                        <input id="add-lon" type="text" placeholder="Lon" style="flex:1; background:#1a1a26; border:1px solid #333; color:#ddd; padding:7px; border-radius:4px; font-size:12px;">
+                    </div>
+                    <button id="btn-add">ADD TO MAP</button>
+                    <div style="font-size:11px; color:#666">Tip: Click directly on the map to prefill coordinates.</div>
+                </div>
+            </div>
+
+            <!-- Upload -->
+            <div class="panel">
+                <h3>Ingest Local Data</h3>
+                <div class="upload-area" id="drop-zone">
+                    Drop .json or .csv here<br>
+                    <small>or click to choose</small>
+                    <input type="file" id="file-input" style="display:none" accept=".json,.csv,.txt">
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="panel">
+                <h3>Filters</h3>
+                <div class="filters">
+                    <label><input type="checkbox" id="f-internet" checked> Internet</label>
+                    <label><input type="checkbox" id="f-local" checked> Local</label>
+                    <label><input type="checkbox" id="f-user" checked> User</label>
+                    <div style="flex:1"></div>
+                    <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
+                        <span>Min score</span>
+                        <input type="range" id="score-slider" min="0" max="100" step="5" value="0" style="width:90px">
+                        <span id="score-val">0</span>
+                    </div>
+                </div>
+                <div style="margin-top:8px;">
+                    <input id="search-box" type="text" placeholder="Search title/desc..." style="width:100%; background:#1a1a26; border:1px solid #333; color:#ddd; padding:7px; border-radius:4px;">
+                </div>
+            </div>
+
+            <!-- Stats + List -->
+            <div class="panel" style="flex:1; display:flex; flex-direction:column; padding-bottom:0;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                    <h3 style="margin:0">Events</h3>
+                    <button id="btn-export" style="font-size:11px; padding:4px 10px;">EXPORT JSON</button>
+                </div>
+                <div id="event-list"></div>
+            </div>
+
+            <div class="footer">
+                Click map to add. Zoom &amp; pan freely. Use DETECT PORTALS to highlight convergence zones.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Leaflet map
+        let map;
+        let markers = {};
+        let currentFilter = { sources: ['internet','local','user'], minScore: 0, query: '' };
+
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: true,
+                attributionControl: true
+            }).setView([20, 0], 2);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                className: 'map-tiles'
+            }).addTo(map);
+
+            // Click to add marker coords
+            map.on('click', function(e) {
+                const lat = e.latlng.lat.toFixed(4);
+                const lon = e.latlng.lng.toFixed(4);
+                document.getElementById('add-lat').value = lat;
+                document.getElementById('add-lon').value = lon;
+                // gentle flash
+                const title = document.getElementById('add-title');
+                title.focus();
+                title.placeholder = `Observation near ${lat}, ${lon}`;
+            });
+
+            // Load initial data
+            refreshAll();
+        }
+
+        function getMarkerColor(source, score) {
+            if (score >= 75) return '#ff3b5c';
+            if (source === 'internet') return '#7b2cbf';
+            if (source === 'local') return '#00c2a8';
+            return '#00f0ff';
+        }
+
+        function addMarkerToMap(ev) {
+            const color = getMarkerColor(ev.source, ev.fracture_score);
+            const icon = L.divIcon({
+                className: 'rift-marker',
+                html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #111;box-shadow:0 0 6px ${color};"></div>`,
+                iconSize: [18, 18],
+                iconAnchor: [9, 9],
+                popupAnchor: [0, -10]
+            });
+
+            const marker = L.marker([ev.lat, ev.lon], {icon}).addTo(map);
+            
+            const popupHtml = `
+                <div style="min-width:220px">
+                    <div style="font-weight:700; margin-bottom:4px;">${ev.title}</div>
+                    <div style="font-size:12px; margin-bottom:6px; color:#aaa;">${ev.source.toUpperCase()} • ${ev.fracture_score} fracture</div>
+                    <div style="font-size:13px; line-height:1.35;">${ev.description}</div>
+                    <div style="margin-top:8px; font-size:11px; color:#777;">${ev.timestamp} — ${ev.tags.join(', ')}</div>
+                </div>
+            `;
+            marker.bindPopup(popupHtml);
+
+            markers[ev.id] = marker;
+            return marker;
+        }
+
+        function clearMarkers() {
+            Object.values(markers).forEach(m => map.removeLayer(m));
+            markers = {};
+        }
+
+        async function refreshAll() {
+            const params = new URLSearchParams();
+            if (currentFilter.minScore) params.set('min_score', currentFilter.minScore);
+            if (currentFilter.query) params.set('q', currentFilter.query);
+            
+            // filter sources client side for simplicity
+            const res = await fetch('/api/events?' + params.toString());
+            const data = await res.json();
+
+            clearMarkers();
+
+            let shown = 0;
+            (data.events || []).forEach(ev => {
+                if (!currentFilter.sources.includes(ev.source)) return;
+                if (ev.fracture_score < currentFilter.minScore) return;
+                if (currentFilter.query) {
+                    const blob = (ev.title + ' ' + ev.description).toLowerCase();
+                    if (!blob.includes(currentFilter.query.toLowerCase())) return;
+                }
+                addMarkerToMap(ev);
+                shown++;
+            });
+
+            renderEventList(data.events || []);
+            await updateStats();
+        }
+
+        async function updateStats() {
+            const res = await fetch('/api/stats');
+            const s = await res.json();
+            const el = document.getElementById('header-stats');
+            if (s.total !== undefined) {
+                el.innerHTML = `${s.total} events • avg ${s.avg_fracture || 0} • high: ${s.high_score || 0}`;
+            }
+        }
+
+        function renderEventList(events) {
+            const container = document.getElementById('event-list');
+            container.innerHTML = '';
+
+            const filtered = events.filter(ev => 
+                currentFilter.sources.includes(ev.source) &&
+                ev.fracture_score >= currentFilter.minScore &&
+                (!currentFilter.query || (ev.title + ' ' + ev.description).toLowerCase().includes(currentFilter.query.toLowerCase()))
+            ).sort((a,b) => b.fracture_score - a.fracture_score);
+
+            if (!filtered.length) {
+                container.innerHTML = `<div style="padding:12px; color:#666; font-size:12px;">No matching events.</div>`;
+                return;
+            }
+
+            filtered.forEach(ev => {
+                const div = document.createElement('div');
+                div.className = 'event-item';
+                const scoreClass = ev.fracture_score >= 70 ? 'high' : (ev.fracture_score >= 40 ? 'med' : '');
+                div.innerHTML = `
+                    <div class="title">${ev.title}</div>
+                    <div class="meta">
+                        <span>${ev.source}</span>
+                        <span class="score ${scoreClass}">${ev.fracture_score}</span>
+                        <span>${new Date(ev.timestamp).toLocaleDateString()}</span>
+                    </div>
+                `;
+                div.onclick = () => {
+                    if (markers[ev.id]) {
+                        map.flyTo([ev.lat, ev.lon], Math.max(map.getZoom(), 7), {duration: 0.6});
+                        markers[ev.id].openPopup();
+                    }
+                };
+                container.appendChild(div);
+            });
+        }
+
+        function updateFilters() {
+            const sources = [];
+            if (document.getElementById('f-internet').checked) sources.push('internet');
+            if (document.getElementById('f-local').checked) sources.push('local');
+            if (document.getElementById('f-user').checked) sources.push('user');
+            currentFilter.sources = sources;
+            currentFilter.minScore = parseInt(document.getElementById('score-slider').value);
+            currentFilter.query = document.getElementById('search-box').value;
+            document.getElementById('score-val').textContent = currentFilter.minScore;
+            refreshAll();
+        }
+
+        async function scanWeb() {
+            const btn = document.getElementById('btn-scan');
+            btn.disabled = true;
+            btn.textContent = 'SCANNING...';
+            try {
+                const res = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({count: 7})
+                });
+                const data = await res.json();
+                console.log('Scan added', data.added);
+                await refreshAll();
+            } catch(e) {
+                alert('Scan failed: ' + e);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'SCAN THE WEB';
+            }
+        }
+
+        async function detectPortals() {
+            const res = await fetch('/api/portals');
+            const data = await res.json();
+
+            // draw circles for clusters
+            data.clusters.forEach((cl, idx) => {
+                const circle = L.circle([cl.center[0], cl.center[1]], {
+                    color: '#ff2d55',
+                    fillColor: '#ff2d55',
+                    fillOpacity: 0.15,
+                    radius: Math.max(cl.radius_km * 1000, 8000),
+                    weight: 2
+                }).addTo(map);
+
+                const popup = L.popup()
+                    .setLatLng([cl.center[0], cl.center[1]])
+                    .setContent(`<b>Potential Portal Zone</b><br>Likelihood: <b>${cl.portal_likelihood}%</b><br>${cl.summary}<br>${cl.num_events} contributing events`);
+
+                circle.bindPopup(popup);
+                
+                // auto open first good one
+                if (idx === 0 && cl.portal_likelihood > 45) {
+                    setTimeout(() => circle.openPopup(), 400);
+                }
+            });
+
+            if (data.count === 0) {
+                alert('No strong portal clusters detected yet. Add more high-score events or scan the web.');
+            }
+        }
+
+        async function addObservation() {
+            const title = document.getElementById('add-title').value.trim() || 'Unlabeled observation';
+            const desc = document.getElementById('add-desc').value.trim();
+            const lat = parseFloat(document.getElementById('add-lat').value);
+            const lon = parseFloat(document.getElementById('add-lon').value);
+
+            if (isNaN(lat) || isNaN(lon)) {
+                alert('Please provide valid latitude and longitude (click map or enter manually).');
+                return;
+            }
+
+            const res = await fetch('/api/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ title, description: desc, lat, lon, source: 'user' })
+            });
+            const data = await res.json();
+            document.getElementById('add-title').value = '';
+            document.getElementById('add-desc').value = '';
+            await refreshAll();
+            // zoom to it
+            if (data.event) {
+                map.flyTo([data.event.lat, data.event.lon], 8, {duration:0.5});
+            }
+        }
+
+        function setupUpload() {
+            const drop = document.getElementById('drop-zone');
+            const input = document.getElementById('file-input');
+
+            drop.onclick = () => input.click();
+            input.onchange = async (e) => {
+                if (e.target.files.length) await uploadFile(e.target.files[0]);
+            };
+
+            drop.ondragover = (e) => { e.preventDefault(); drop.style.borderColor = '#7b2cbf'; };
+            drop.ondragleave = () => { drop.style.borderColor = '#333344'; };
+            drop.ondrop = async (e) => {
+                e.preventDefault();
+                drop.style.borderColor = '#333344';
+                if (e.dataTransfer.files.length) {
+                    await uploadFile(e.dataTransfer.files[0]);
+                }
+            };
+        }
+
+        async function uploadFile(file) {
+            const fd = new FormData();
+            fd.append('file', file);
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                await refreshAll();
+                alert(`Ingested ${data.added} events from local data.`);
+            } catch (err) {
+                alert('Upload failed: ' + err.message);
+            }
+        }
+
+        async function clearAll() {
+            if (!confirm('Clear all events and reseed with examples?')) return;
+            await fetch('/api/clear', {method:'POST'});
+            await refreshAll();
+        }
+
+        function setupListeners() {
+            document.getElementById('btn-scan').onclick = scanWeb;
+            document.getElementById('btn-portals').onclick = detectPortals;
+            document.getElementById('btn-clear').onclick = clearAll;
+            document.getElementById('btn-add').onclick = addObservation;
+            document.getElementById('btn-export').onclick = () => { window.location = '/api/export'; };
+
+            // filter listeners
+            ['f-internet','f-local','f-user','score-slider','search-box'].forEach(id => {
+                const el = document.getElementById(id);
+                el.onchange = updateFilters;
+                el.oninput = updateFilters;
+            });
+
+            // keyboard nice-to-have: press / focus search
+            document.addEventListener('keydown', (e) => {
+                if (e.key === '/' && document.activeElement.tagName === 'BODY') {
+                    e.preventDefault();
+                    document.getElementById('search-box').focus();
+                }
+            });
+        }
+
+        async function bootstrap() {
+            initMap();
+            setupListeners();
+            setupUpload();
+
+            // initial filter sync
+            document.getElementById('score-val').textContent = '0';
+            
+            // poll stats occasionally
+            setInterval(updateStats, 45000);
+        }
+
+        // Auto bootstrap
+        window.onload = bootstrap;
+    </script>
+</body>
+</html>
