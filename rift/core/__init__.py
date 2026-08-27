@@ -2,5 +2,6 @@
 from .events import Event, EventStore
 from .scanner import WebScanner, LocalIngester
 from .detector import PortalDetector
+from .geo import haversine
 
-__all__ = ["Event", "EventStore", "WebScanner", "LocalIngester", "PortalDetector"]
+__all__ = ["Event", "EventStore", "WebScanner", "LocalIngester", "PortalDetector", "haversine"]

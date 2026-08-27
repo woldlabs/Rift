@@ -6,6 +6,7 @@
     <title>RIFT • Reality Integrity & Fracture Tracker</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <style>
         :root {
             --bg: #0a0a12;
@@ -57,7 +58,7 @@
         }
 
         .sidebar {
-            width: 340px;
+            width: 360px;
             background: var(--panel);
             border-left: 1px solid #222233;
             display: flex;
@@ -95,17 +96,10 @@
         }
         button.primary:hover { filter: brightness(1.15); }
         button.danger { border-color: var(--danger); color: #ff9aa8; }
+        button.active { border-color: var(--accent2); color: var(--accent2); }
 
         .controls { display: flex; flex-wrap: wrap; gap: 8px; }
         .controls button { flex: 1; min-width: 110px; }
-
-        .statbar {
-            display: flex;
-            gap: 12px;
-            font-size: 12px;
-        }
-        .stat { background: #1a1a26; padding: 4px 10px; border-radius: 4px; }
-        .stat span { color: var(--accent2); font-weight: 600; }
 
         #event-list {
             flex: 1;
@@ -119,7 +113,7 @@
         }
         .event-item:hover { background: #1a1a26; }
         .event-item .title { font-weight: 600; }
-        .event-item .meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; margin-top: 2px; }
+        .event-item .meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; margin-top: 2px; flex-wrap: wrap; }
         .score { padding: 1px 6px; border-radius: 3px; font-size: 11px; background: #222233; }
         .score.high { background: #3a1f2f; color: #ff8a9e; }
         .score.med { background: #2f2f1f; color: #f0d070; }
@@ -127,6 +121,10 @@
         .filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
         .filters label { font-size: 12px; display: flex; align-items: center; gap: 4px; color: var(--muted); }
         input[type="range"] { accent-color: var(--accent); }
+        select {
+            background: #1a1a26; border: 1px solid #333; color: #ddd;
+            padding: 6px; border-radius: 4px; font-size: 12px;
+        }
 
         .upload-area {
             border: 2px dashed #333344;
@@ -153,10 +151,6 @@
             border: 1px solid #333344;
         }
         .leaflet-popup-tip { background: #1a1a26; }
-        .marker-label {
-            font-size: 11px;
-            font-weight: 600;
-        }
     </style>
 </head>
 <body>
@@ -175,22 +169,19 @@
     </header>
 
     <div class="main">
-        <!-- MAP -->
         <div id="map"></div>
 
-        <!-- SIDEBAR -->
         <div class="sidebar">
-            <!-- Actions -->
             <div class="panel">
                 <h3>Intelligence Feed</h3>
                 <div class="controls">
                     <button id="btn-scan" class="primary">SCAN THE WEB</button>
                     <button id="btn-portals">DETECT PORTALS</button>
+                    <button id="btn-heat">HEATMAP</button>
                     <button id="btn-clear" class="danger">CLEAR + RESEED</button>
                 </div>
             </div>
 
-            <!-- Add manual -->
             <div class="panel">
                 <h3>Add Observation</h3>
                 <div style="display:flex; flex-direction:column; gap:6px;">
@@ -205,7 +196,6 @@
                 </div>
             </div>
 
-            <!-- Upload -->
             <div class="panel">
                 <h3>Ingest Local Data</h3>
                 <div class="upload-area" id="drop-zone">
@@ -218,7 +208,6 @@
                 </div>
             </div>
 
-            <!-- Judge Integration -->
             <div class="panel">
                 <h3>Judge Integration</h3>
                 <div style="font-size:11px; line-height:1.3; color:#aaa; margin-bottom:6px;">
@@ -226,49 +215,66 @@
                 </div>
                 <button id="btn-judge-export" style="width:100%; margin-bottom:4px;">EXPORT FOR JUDGE</button>
                 <div style="font-size:10px;color:#666">
-                    Upload a Judge report JSON (or use the Local Data drop zone — it auto-detects).
+                    Downloads a Judge-ready manifest (top sites + suggested media). Upload a Judge report JSON in the drop zone to pin detections back on the map.
                 </div>
             </div>
 
-            <!-- Filters -->
             <div class="panel">
                 <h3>Filters</h3>
                 <div class="filters">
                     <label><input type="checkbox" id="f-internet" checked> Internet</label>
                     <label><input type="checkbox" id="f-local" checked> Local</label>
                     <label><input type="checkbox" id="f-user" checked> User</label>
-                    <div style="flex:1"></div>
-                    <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
-                        <span>Min score</span>
-                        <input type="range" id="score-slider" min="0" max="100" step="5" value="0" style="width:90px">
-                        <span id="score-val">0</span>
-                    </div>
+                    <label><input type="checkbox" id="f-judge" checked> Judge</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:8px; font-size:11px;">
+                    <span>Min score</span>
+                    <input type="range" id="score-slider" min="0" max="100" step="5" value="0" style="width:90px">
+                    <span id="score-val">0</span>
+                    <select id="time-window" title="Only show events in this window">
+                        <option value="0">All time</option>
+                        <option value="24">Last 24h</option>
+                        <option value="72">Last 3 days</option>
+                        <option value="168">Last 7 days</option>
+                        <option value="720">Last 30 days</option>
+                    </select>
                 </div>
                 <div style="margin-top:8px;">
                     <input id="search-box" type="text" placeholder="Search title/desc..." style="width:100%; background:#1a1a26; border:1px solid #333; color:#ddd; padding:7px; border-radius:4px;">
                 </div>
             </div>
 
-            <!-- Stats + List -->
             <div class="panel" style="flex:1; display:flex; flex-direction:column; padding-bottom:0;">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; gap:6px;">
                     <h3 style="margin:0">Events</h3>
-                    <button id="btn-export" style="font-size:11px; padding:4px 10px;">EXPORT JSON</button>
+                    <div>
+                        <button id="btn-export" style="font-size:11px; padding:4px 8px;">JSON</button>
+                        <button id="btn-export-geo" style="font-size:11px; padding:4px 8px;">GeoJSON</button>
+                        <button id="btn-export-kml" style="font-size:11px; padding:4px 8px;">KML</button>
+                    </div>
                 </div>
                 <div id="event-list"></div>
             </div>
 
             <div class="footer">
-                Click map to add. Zoom &amp; pan freely. Use DETECT PORTALS to highlight convergence zones.
+                Click map to add. Zoom &amp; pan freely. DETECT PORTALS highlights sites where independent reports converge in space and time.
             </div>
         </div>
     </div>
 
     <script>
-        // Leaflet map
         let map;
         let markers = {};
-        let currentFilter = { sources: ['internet','local','user'], minScore: 0, query: '' };
+        let portalLayer;
+        let heatLayer = null;
+        let heatOn = false;
+        let currentFilter = { sources: ['internet','local','user','judge'], minScore: 0, query: '', sinceHours: 0 };
+
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({
+                '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+            }[c]));
+        }
 
         function initMap() {
             map = L.map('map', {
@@ -278,22 +284,21 @@
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                className: 'map-tiles'
+                attribution: '&copy; OpenStreetMap'
             }).addTo(map);
 
-            // Click to add marker coords
+            portalLayer = L.layerGroup().addTo(map);
+
             map.on('click', function(e) {
                 const lat = e.latlng.lat.toFixed(4);
                 const lon = e.latlng.lng.toFixed(4);
                 document.getElementById('add-lat').value = lat;
                 document.getElementById('add-lon').value = lon;
-                // gentle flash
                 const title = document.getElementById('add-title');
                 title.focus();
                 title.placeholder = `Observation near ${lat}, ${lon}`;
             });
 
-            // Load initial data
             refreshAll();
         }
 
@@ -301,11 +306,13 @@
             if (score >= 75) return '#ff3b5c';
             if (source === 'internet') return '#7b2cbf';
             if (source === 'local') return '#00c2a8';
+            if (source === 'judge') return '#f0a202';
             return '#00f0ff';
         }
 
         function addMarkerToMap(ev) {
-            const color = getMarkerColor(ev.source, ev.fracture_score);
+            const score = (ev.effective_score != null) ? ev.effective_score : ev.fracture_score;
+            const color = getMarkerColor(ev.source, score);
             const icon = L.divIcon({
                 className: 'rift-marker',
                 html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #111;box-shadow:0 0 6px ${color};"></div>`,
@@ -315,17 +322,20 @@
             });
 
             const marker = L.marker([ev.lat, ev.lon], {icon}).addTo(map);
-            
+            const boost = (ev.meta && ev.meta.corroboration_boost) ? ev.meta.corroboration_boost : 0;
+            const corr = (ev.meta && ev.meta.corroborating_sources && ev.meta.corroborating_sources.length)
+                ? `<div style="font-size:11px;color:#7dffc3;margin-top:4px;">Corroborated by ${esc(ev.meta.corroborating_sources.join(', '))}</div>`
+                : '';
             const popupHtml = `
                 <div style="min-width:220px">
-                    <div style="font-weight:700; margin-bottom:4px;">${ev.title}</div>
-                    <div style="font-size:12px; margin-bottom:6px; color:#aaa;">${ev.source.toUpperCase()} • ${ev.fracture_score} fracture</div>
-                    <div style="font-size:13px; line-height:1.35;">${ev.description}</div>
-                    <div style="margin-top:8px; font-size:11px; color:#777;">${ev.timestamp} — ${ev.tags.join(', ')}</div>
+                    <div style="font-weight:700; margin-bottom:4px;">${esc(ev.title)}</div>
+                    <div style="font-size:12px; margin-bottom:6px; color:#aaa;">${esc(String(ev.source).toUpperCase())} • ${esc(score)} fracture${boost ? ' (+' + esc(boost) + ' corr.)' : ''}</div>
+                    <div style="font-size:13px; line-height:1.35;">${esc(ev.description)}</div>
+                    ${corr}
+                    <div style="margin-top:8px; font-size:11px; color:#777;">${esc(ev.timestamp)} — ${esc((ev.tags||[]).join(', '))}</div>
                 </div>
             `;
             marker.bindPopup(popupHtml);
-
             markers[ev.id] = marker;
             return marker;
         }
@@ -339,27 +349,41 @@
             const params = new URLSearchParams();
             if (currentFilter.minScore) params.set('min_score', currentFilter.minScore);
             if (currentFilter.query) params.set('q', currentFilter.query);
-            
-            // filter sources client side for simplicity
+            if (currentFilter.sinceHours) params.set('since_hours', currentFilter.sinceHours);
+
             const res = await fetch('/api/events?' + params.toString());
             const data = await res.json();
 
             clearMarkers();
 
-            let shown = 0;
+            const visible = [];
             (data.events || []).forEach(ev => {
                 if (!currentFilter.sources.includes(ev.source)) return;
-                if (ev.fracture_score < currentFilter.minScore) return;
-                if (currentFilter.query) {
-                    const blob = (ev.title + ' ' + ev.description).toLowerCase();
-                    if (!blob.includes(currentFilter.query.toLowerCase())) return;
-                }
+                visible.push(ev);
                 addMarkerToMap(ev);
-                shown++;
             });
 
-            renderEventList(data.events || []);
+            renderEventList(visible);
+            updateHeat(visible);
             await updateStats();
+        }
+
+        function updateHeat(events) {
+            if (heatLayer) {
+                map.removeLayer(heatLayer);
+                heatLayer = null;
+            }
+            if (!heatOn || typeof L.heatLayer !== 'function') return;
+            const pts = events.map(ev => {
+                const s = (ev.effective_score != null) ? ev.effective_score : ev.fracture_score;
+                return [ev.lat, ev.lon, Math.max(0.15, s / 100)];
+            });
+            heatLayer = L.heatLayer(pts, {
+                radius: 32,
+                blur: 22,
+                maxZoom: 8,
+                gradient: {0.2: '#1a0a2e', 0.5: '#7b2cbf', 0.75: '#00f0ff', 1.0: '#ff3b5c'}
+            }).addTo(map);
         }
 
         async function updateStats() {
@@ -367,19 +391,14 @@
             const s = await res.json();
             const el = document.getElementById('header-stats');
             if (s.total !== undefined) {
-                el.innerHTML = `${s.total} events • avg ${s.avg_fracture || 0} • high: ${s.high_score || 0}`;
+                el.innerHTML = `${s.total} events • avg ${s.avg_fracture || 0} • high: ${s.high_score || 0} • sites: ${s.portals || 0}`;
             }
         }
 
         function renderEventList(events) {
             const container = document.getElementById('event-list');
             container.innerHTML = '';
-
-            const filtered = events.filter(ev => 
-                currentFilter.sources.includes(ev.source) &&
-                ev.fracture_score >= currentFilter.minScore &&
-                (!currentFilter.query || (ev.title + ' ' + ev.description).toLowerCase().includes(currentFilter.query.toLowerCase()))
-            ).sort((a,b) => b.fracture_score - a.fracture_score);
+            const filtered = events.slice().sort((a,b) => (b.effective_score||b.fracture_score) - (a.effective_score||a.fracture_score));
 
             if (!filtered.length) {
                 container.innerHTML = `<div style="padding:12px; color:#666; font-size:12px;">No matching events.</div>`;
@@ -387,15 +406,18 @@
             }
 
             filtered.forEach(ev => {
+                const score = ev.effective_score != null ? ev.effective_score : ev.fracture_score;
                 const div = document.createElement('div');
                 div.className = 'event-item';
-                const scoreClass = ev.fracture_score >= 70 ? 'high' : (ev.fracture_score >= 40 ? 'med' : '');
+                const scoreClass = score >= 70 ? 'high' : (score >= 40 ? 'med' : '');
+                const d = ev.timestamp ? new Date(ev.timestamp) : null;
+                const when = (d && !isNaN(d)) ? d.toLocaleDateString() : '';
                 div.innerHTML = `
-                    <div class="title">${ev.title}</div>
+                    <div class="title">${esc(ev.title)}</div>
                     <div class="meta">
-                        <span>${ev.source}</span>
-                        <span class="score ${scoreClass}">${ev.fracture_score}</span>
-                        <span>${new Date(ev.timestamp).toLocaleDateString()}</span>
+                        <span>${esc(ev.source)}</span>
+                        <span class="score ${scoreClass}">${esc(score)}</span>
+                        <span>${esc(when)}</span>
                     </div>
                 `;
                 div.onclick = () => {
@@ -413,9 +435,11 @@
             if (document.getElementById('f-internet').checked) sources.push('internet');
             if (document.getElementById('f-local').checked) sources.push('local');
             if (document.getElementById('f-user').checked) sources.push('user');
+            if (document.getElementById('f-judge').checked) sources.push('judge');
             currentFilter.sources = sources;
             currentFilter.minScore = parseInt(document.getElementById('score-slider').value);
             currentFilter.query = document.getElementById('search-box').value;
+            currentFilter.sinceHours = parseInt(document.getElementById('time-window').value) || 0;
             document.getElementById('score-val').textContent = currentFilter.minScore;
             refreshAll();
         }
@@ -431,7 +455,6 @@
                     body: JSON.stringify({count: 7})
                 });
                 const data = await res.json();
-                console.log('Scan added', data.added);
                 await refreshAll();
             } catch(e) {
                 alert('Scan failed: ' + e);
@@ -444,32 +467,41 @@
         async function detectPortals() {
             const res = await fetch('/api/portals');
             const data = await res.json();
+            portalLayer.clearLayers();
 
-            // draw circles for clusters
-            data.clusters.forEach((cl, idx) => {
+            (data.clusters || []).forEach((cl, idx) => {
                 const circle = L.circle([cl.center[0], cl.center[1]], {
                     color: '#ff2d55',
                     fillColor: '#ff2d55',
                     fillOpacity: 0.15,
                     radius: Math.max(cl.radius_km * 1000, 8000),
                     weight: 2
-                }).addTo(map);
-
-                const popup = L.popup()
-                    .setLatLng([cl.center[0], cl.center[1]])
-                    .setContent(`<b>Potential Portal Zone</b><br>Likelihood: <b>${cl.portal_likelihood}%</b><br>${cl.summary}<br>${cl.num_events} contributing events`);
-
-                circle.bindPopup(popup);
-                
-                // auto open first good one
+                });
+                circle.bindPopup(
+                    `<b>Potential Portal Zone</b><br>` +
+                    `Likelihood: <b>${esc(cl.portal_likelihood)}%</b><br>` +
+                    `${esc(cl.summary)}<br>` +
+                    `${esc(cl.num_events)} contributing events` +
+                    (cl.sources && cl.sources.length ? `<br>Sources: ${esc(cl.sources.join(', '))}` : '')
+                );
+                portalLayer.addLayer(circle);
                 if (idx === 0 && cl.portal_likelihood > 45) {
                     setTimeout(() => circle.openPopup(), 400);
+                    map.flyTo([cl.center[0], cl.center[1]], Math.max(map.getZoom(), 6), {duration: 0.7});
                 }
             });
 
             if (data.count === 0) {
                 alert('No strong portal clusters detected yet. Add more high-score events or scan the web.');
             }
+        }
+
+        function toggleHeat() {
+            heatOn = !heatOn;
+            const btn = document.getElementById('btn-heat');
+            if (heatOn) btn.classList.add('active');
+            else btn.classList.remove('active');
+            refreshAll();
         }
 
         async function addObservation() {
@@ -492,7 +524,6 @@
             document.getElementById('add-title').value = '';
             document.getElementById('add-desc').value = '';
             await refreshAll();
-            // zoom to it
             if (data.event) {
                 map.flyTo([data.event.lat, data.event.lon], 8, {duration:0.5});
             }
@@ -535,35 +566,27 @@
         async function clearAll() {
             if (!confirm('Clear all events and reseed with examples?')) return;
             await fetch('/api/clear', {method:'POST'});
+            portalLayer.clearLayers();
             await refreshAll();
         }
 
         function setupListeners() {
             document.getElementById('btn-scan').onclick = scanWeb;
             document.getElementById('btn-portals').onclick = detectPortals;
+            document.getElementById('btn-heat').onclick = toggleHeat;
             document.getElementById('btn-clear').onclick = clearAll;
             document.getElementById('btn-add').onclick = addObservation;
             document.getElementById('btn-export').onclick = () => { window.location = '/api/export'; };
-            const jexp = document.getElementById('btn-judge-export');
-            if (jexp) jexp.onclick = async () => {
-                const res = await fetch('/api/export');
-                const blob = await res.blob();
-                // For now just download the Rift session; user can use prepare_for_judge offline or future endpoint
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = 'rift_for_judge.json';
-                a.click();
-                alert('Downloaded current session. Use rift.integrations.judge.prepare_for_judge() or attach media and run Judge on the locations shown.');
-            };
+            document.getElementById('btn-export-geo').onclick = () => { window.location = '/api/export?format=geojson'; };
+            document.getElementById('btn-export-kml').onclick = () => { window.location = '/api/export?format=kml'; };
+            document.getElementById('btn-judge-export').onclick = () => { window.location = '/api/judge_manifest'; };
 
-            // filter listeners
-            ['f-internet','f-local','f-user','score-slider','search-box'].forEach(id => {
+            ['f-internet','f-local','f-user','f-judge','score-slider','search-box','time-window'].forEach(id => {
                 const el = document.getElementById(id);
                 el.onchange = updateFilters;
                 el.oninput = updateFilters;
             });
 
-            // keyboard nice-to-have: press / focus search
             document.addEventListener('keydown', (e) => {
                 if (e.key === '/' && document.activeElement.tagName === 'BODY') {
                     e.preventDefault();
@@ -576,15 +599,10 @@
             initMap();
             setupListeners();
             setupUpload();
-
-            // initial filter sync
             document.getElementById('score-val').textContent = '0';
-            
-            // poll stats occasionally
             setInterval(updateStats, 45000);
         }
 
-        // Auto bootstrap
         window.onload = bootstrap;
     </script>
 </body>

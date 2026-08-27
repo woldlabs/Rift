@@ -9,6 +9,8 @@ __pycache__/
 rift_session.json
 *.log
 reports/
+.pytest_cache/
+
 
 # OS
 .DS_Store

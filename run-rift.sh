@@ -14,4 +14,4 @@ echo "Installing / updating dependencies..."
 pip install -r requirements.txt --quiet
 
 echo "Launching Rift..."
-python -m rift.web.app
+python -m rift

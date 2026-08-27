@@ -8,14 +8,29 @@ Typical workflow:
 1. Use Rift to scan, map, and identify candidate events + locations.
 2. Collect corroborating media at those times/locations.
 3. Feed media to Judge for rigorous signal detection + report.
-4. Optionally import Judge's anomaly results back into Rift map for geo context.
+4. Import Judge's anomaly results back onto the Rift map for geo context.
 """
 from __future__ import annotations
-import json
-from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
 
-from ..core.events import Event, _score_text
+import json
+from typing import Any, Dict, List, Optional
+
+from ..core.events import Event, score_text
+from ..core.geo import utc_now_iso
+
+
+def is_judge_report(data: Any) -> bool:
+    """True if this looks like a Judge AnalysisResult JSON object."""
+    if not isinstance(data, dict):
+        return False
+    events = data.get("events")
+    if data.get("session_id") and isinstance(events, list):
+        return True
+    if isinstance(events, list) and events and isinstance(events[0], dict):
+        sample = events[0]
+        if "modality" in sample and ("file_path" in sample or "event_id" in sample):
+            return True
+    return False
 
 
 def import_judge_report(
@@ -27,10 +42,8 @@ def import_judge_report(
     """
     Convert a Judge AnalysisResult (dict or JSON string/bytes) into Rift Events.
 
-    Judge events lack geo info, so a default location is used (or caller can
-    post-process). Timestamps from Judge are relative; we attach them in meta.
-
-    Returns list of new Event objects (caller should STORE.add_many).
+    Judge events lack geo info, so a default location is used. Multiple events
+    at the same default are nudged by a few meters so pins remain clickable.
     """
     if isinstance(report, (str, bytes)):
         data = json.loads(report)
@@ -40,35 +53,47 @@ def import_judge_report(
     events: List[Event] = []
     j_events = data.get("events", []) or []
 
-    for je in j_events:
-        title = f"[{je.get('modality','?').upper()}] {je.get('description','Judge anomaly')[:80]}"
-        desc = je.get("description", "")
-        # Attach full Judge details for traceability
+    for i, je in enumerate(j_events):
+        if not isinstance(je, dict):
+            continue
+        modality = str(je.get("modality", "?") or "?")
+        raw_desc = str(je.get("description") or "Judge anomaly")
+        title = f"[{modality.upper()}] {raw_desc[:80]}"
         meta = {
             "judge_event_id": je.get("event_id"),
+            "judge_session_id": data.get("session_id"),
             "modality": je.get("modality"),
             "start_time": je.get("start_time"),
             "duration": je.get("duration"),
             "judge_score": je.get("score"),
             "file_path": je.get("file_path"),
             "geometry": je.get("geometry"),
+            "shape_description": je.get("shape_description"),
             "tags_from_judge": je.get("tags", []),
         }
 
+        # Slight offset so stacked Judge pins can be selected independently.
+        lat = float(default_lat) + ((i % 5) - 2) * 0.0018
+        lon = float(default_lon) + ((i // 5) % 5 - 2) * 0.0018
+
+        try:
+            jscore = float(je.get("score", 40) or 40)
+        except (TypeError, ValueError):
+            jscore = 40.0
+
         ev = Event(
-            id=f"judge-{je.get('event_id', str(hash(title)))}",
+            id=f"judge-{je.get('event_id', i)}",
             title=title[:110],
-            description=desc,
-            lat=default_lat,
-            lon=default_lon,
+            description=raw_desc,
+            lat=round(lat, 6),
+            lon=round(lon, 6),
             source=source_tag,
-            timestamp=data.get("timestamp") or datetime.utcnow().isoformat() + "Z",
-            tags=["judge", je.get("modality", "sensor")],
-            fracture_score=max(30.0, min(95.0, float(je.get("score", 40)) * 1.2)),  # lift for visibility
+            timestamp=data.get("timestamp") or utc_now_iso(),
+            tags=["judge", modality],
+            fracture_score=max(30.0, min(95.0, jscore * 1.2)),
+            meta=meta,
         )
-        ev.meta = meta  # attach
-        # Re-score using combined text too
-        ev.fracture_score = max(ev.fracture_score, _score_text(title + " " + desc))
+        ev.fracture_score = max(ev.fracture_score, score_text(title + " " + raw_desc))
         events.append(ev)
 
     return events
@@ -81,17 +106,18 @@ def prepare_for_judge(
     """
     Produce a manifest that helps a user prepare media for Judge analysis.
 
-    Output contains high-interest Rift events + placeholders for the media files
-    you should record/attach (video of the event, audio logs, sensor CSVs near
-    the location/time).
+    High-interest Rift sites first, with placeholders for the video/audio/sensor
+    files that should be recorded at those locations/times.
     """
-    manifest = {
+    manifest: Dict[str, Any] = {
         "generated_for": "Judge",
+        "generated_at": utc_now_iso(),
         "rift_events": [],
         "suggested_actions": [],
     }
 
-    for e in sorted(rift_events, key=lambda x: -x.fracture_score)[:20]:
+    ranked = sorted(rift_events, key=lambda x: -x.effective_score)[:20]
+    for e in ranked:
         item = {
             "rift_id": e.id,
             "title": e.title,
@@ -99,6 +125,7 @@ def prepare_for_judge(
             "lat": e.lat,
             "lon": e.lon,
             "fracture_score": e.fracture_score,
+            "effective_score": e.effective_score,
             "source": e.source,
             "timestamp": e.timestamp,
             "tags": e.tags,
@@ -112,7 +139,7 @@ def prepare_for_judge(
 
     manifest["suggested_actions"] = [
         "Collect synchronized multi-modal recordings at the marked locations/times.",
-        "Use Judge GUI or headless AnalysisSession on the collected files.",
+        "Use Judge (`python -m judge` or AnalysisSession) on the collected files.",
         "Import the resulting Judge report JSON back into Rift via Upload (auto-converts).",
     ]
     return manifest

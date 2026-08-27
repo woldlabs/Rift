@@ -1,15 +1,17 @@
 """Web scanner (simulated intelligence feed) + local data ingester for Rift."""
 from __future__ import annotations
-import json
-import random
+
 import csv
 import io
-import uuid
+import json
+import random
 import time
-from datetime import datetime, timedelta
-from typing import List, Dict, Any
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Any, List
 
-from .events import Event, _score_text
+from .events import Event, score_event_text, score_text
+from .geo import utc_now_iso, valid_coords
 
 # Plausible locations for "internet" anomalies (lat, lon, place hint)
 SEED_LOCATIONS = [
@@ -43,25 +45,18 @@ INTERNET_TEMPLATES = [
     ("Low-frequency 'door slam' heard across city {place}", "A deep concussive sound followed by 8 seconds of complete silence. Reported by thousands. No explosion registered."),
 ]
 
-LOCAL_TEMPLATES = [
-    ("Field log: anomalous reading", "Sensor logged a 47-second spike across all EM bands coinciding with visual distortion reported by observer."),
-    ("Notebook entry: repeating lights", "Same pattern of 3 short + 2 long flashes at 02:17 for three consecutive nights. No known aircraft schedule."),
-    ("Audio log fragment", "Low pulsing tone increasing in pitch then abrupt cut to silence. Captured on phone mic at 03:41."),
-]
-
 
 class WebScanner:
     """Generates plausible 'internet-sourced' anomaly events."""
 
     def __init__(self, rng_seed: int | None = None):
-        self.rng = random.Random(rng_seed or int(time.time()))
+        self.rng = random.Random(rng_seed if rng_seed is not None else int(time.time()))
 
     def scan(self, count: int = 7) -> List[Event]:
         events: List[Event] = []
-        used = set()
+        count = max(1, min(30, int(count)))
         for _ in range(count):
             lat, lon, place = self.rng.choice(SEED_LOCATIONS)
-            # slight jitter so they don't stack exactly
             lat += self.rng.uniform(-0.6, 0.6)
             lon += self.rng.uniform(-0.8, 0.8)
 
@@ -69,9 +64,8 @@ class WebScanner:
             title = template_title.format(place=place)
             desc = template_desc.format(place=place)
 
-            # random recent time
             hours_ago = self.rng.randint(1, 72)
-            ts = (datetime.utcnow() - timedelta(hours=hours_ago)).isoformat() + "Z"
+            ts = (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).isoformat().replace("+00:00", "Z")
 
             tags = ["internet", self.rng.choice(["visual", "auditory", "temporal", "gravitic", "memory", "em"])]
 
@@ -85,9 +79,9 @@ class WebScanner:
                 timestamp=ts,
                 tags=tags,
             )
-            # Force a re-score based on text (usually high for these)
-            ev.fracture_score = _score_text(title + " " + desc) * self.rng.uniform(0.85, 1.05)
-            ev.fracture_score = round(max(18, min(96, ev.fracture_score)), 1)
+            # Linguistic score with the internet skepticism discount, then a
+            # floor: these templates are curated incident reports, not raw noise.
+            ev.fracture_score = max(16.0, min(96.0, score_event_text(title, desc, source="internet")))
             events.append(ev)
         return events
 
@@ -95,43 +89,73 @@ class WebScanner:
 class LocalIngester:
     """Parses user-provided local data into Events."""
 
-    def ingest_json(self, payload: str | bytes | list) -> List[Event]:
+    def ingest_json(self, payload: str | bytes | list | dict) -> List[Event]:
         if isinstance(payload, (str, bytes)):
             data = json.loads(payload)
         else:
             data = payload
-        out = []
+
+        if isinstance(data, dict):
+            if isinstance(data.get("events"), list):
+                data = data["events"]
+            elif isinstance(data.get("data"), list):
+                data = data["data"]
+            else:
+                data = [data]
+
+        out: List[Event] = []
+        if not isinstance(data, list):
+            return out
         for item in data:
             if not isinstance(item, dict):
                 continue
+            try:
+                lat = float(item.get("lat", item.get("latitude")))
+                lon = float(item.get("lon", item.get("longitude", item.get("lng"))))
+            except (TypeError, ValueError):
+                continue
+            if not valid_coords(lat, lon):
+                continue
+            title = item.get("title") or item.get("name") or "Untitled local event"
+            desc = item.get("description", item.get("desc", ""))
+            source = item.get("source") or "local"
             ev = Event(
                 id=item.get("id") or str(uuid.uuid4()),
-                title=item.get("title") or item.get("name") or "Untitled local event",
-                description=item.get("description", item.get("desc", "")),
-                lat=float(item["lat"]),
-                lon=float(item["lon"]),
-                source="local",
-                timestamp=item.get("timestamp") or datetime.utcnow().isoformat() + "Z",
-                tags=item.get("tags", []),
+                title=str(title),
+                description=str(desc),
+                lat=lat,
+                lon=lon,
+                source=source if source in {"internet", "local", "user", "judge"} else "local",
+                timestamp=item.get("timestamp") or utc_now_iso(),
+                tags=list(item.get("tags") or ["local"]),
+                meta=dict(item.get("meta") or {}),
             )
-            ev.fracture_score = float(item.get("fracture_score") or _score_text(ev.title + " " + ev.description))
+            if item.get("fracture_score") not in (None, ""):
+                try:
+                    ev.fracture_score = float(item["fracture_score"])
+                except (TypeError, ValueError):
+                    ev.fracture_score = score_event_text(ev.title, ev.description, ev.source)
+            else:
+                ev.fracture_score = score_event_text(ev.title, ev.description, ev.source)
             out.append(ev)
         return out
 
     def ingest_csv(self, text: str) -> List[Event]:
-        out = []
+        out: List[Event] = []
         reader = csv.DictReader(io.StringIO(text))
         for row in reader:
             try:
                 lat = float(row.get("lat") or row.get("latitude"))
                 lon = float(row.get("lon") or row.get("longitude") or row.get("lng"))
-            except Exception:
+            except (TypeError, ValueError):
+                continue
+            if not valid_coords(lat, lon):
                 continue
             title = row.get("title") or row.get("name") or "Local observation"
             desc = row.get("description") or row.get("desc") or row.get("notes") or ""
             tags_raw = row.get("tags", "")
             tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else ["local"]
-            ts = row.get("timestamp") or datetime.utcnow().isoformat() + "Z"
+            ts = row.get("timestamp") or utc_now_iso()
             ev = Event(
                 id=str(uuid.uuid4()),
                 title=title,
@@ -142,22 +166,24 @@ class LocalIngester:
                 timestamp=ts,
                 tags=tags,
             )
-            ev.fracture_score = _score_text(f"{title} {desc}")
+            ev.fracture_score = score_event_text(title, desc, "local")
             out.append(ev)
         return out
 
     def ingest_text(self, text: str, default_lat: float = 40.7, default_lon: float = -74.0) -> List[Event]:
         """Treat whole text blob as a single user-provided local event."""
-        title = text.strip().split("\n")[0][:80] or "User note"
+        if not valid_coords(default_lat, default_lon):
+            default_lat, default_lon = 40.7, -74.0
+        title = (text.strip().split("\n")[0] if text.strip() else "User note")[:80]
         ev = Event(
             id=str(uuid.uuid4()),
-            title=title,
+            title=title or "User note",
             description=text.strip(),
             lat=default_lat,
             lon=default_lon,
             source="local",
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=utc_now_iso(),
             tags=["text-note"],
         )
-        ev.fracture_score = _score_text(text)
+        ev.fracture_score = score_text(text)
         return [ev]

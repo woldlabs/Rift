@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rift-tracker"
+version = "0.2.0"
+description = "Reality Integrity & Fracture Tracker — geospatial portal and anomaly mapping"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{name = "woldlabs", email = "contact@woldlabs.dev"}]
+keywords = ["anomaly-detection", "geospatial", "uap", "portals", "mapping"]
+dependencies = ["flask>=3.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.urls]
+Homepage = "https://github.com/woldlabs/Rift"
+Repository = "https://github.com/woldlabs/Rift"
+
+[project.scripts]
+rift = "rift.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["rift*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
