@@ -12,6 +12,8 @@ Rift ingests signals from three sources and triangulates them on geography:
 
 **Current version:** 0.2.0
 
+**Product vision / triage:** See [VISION.md](VISION.md) for purpose, non-goals, architecture boundaries, success metrics, and how Rift relates to Judge.
+
 ## Core Features
 
 - **Web Intelligence Scanner**: One-click "Scan the Web". Pulls simulated reports of dimensional anomalies, time slips, glowing rifts, vanishing points, sky tears, and high-strangeness clusters. Events are geolocated and scored with an internet skepticism discount.
