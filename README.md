@@ -17,6 +17,7 @@ Rift ingests signals from three sources and triangulates them on geography:
 ## Core Features
 
 - **Web Intelligence Scanner**: One-click "Scan the Web". Pulls simulated reports of dimensional anomalies, time slips, glowing rifts, vanishing points, sky tears, and high-strangeness clusters. Events are geolocated and scored with an internet skepticism discount.
+  - **Fixture provider (demo/CI only):** set `RIFT_WEB_INTEL=fixture` (optional `RIFT_WEB_INTEL_FIXTURE=/path/to.json`) or POST `/api/scan` with `{"provider":"fixture"}` to replay checked-in reports under `tests/fixtures/web_intel_reports.json`. No live network. Not production intel.
 - **Local Data Ingestion**: Upload JSON, CSV, or plain text. Rift parses locations, descriptions, and timestamps. Rift session exports and `{ "events": [...] }` wrappers round-trip. Invalid coordinates are skipped.
 - **Zoomable Reality Map**: Leaflet map. Click anywhere to add an observation. Color-coded markers by source and anomaly strength. Optional **heatmap** of fracture intensity.
 - **Portal Detector**: Seed-and-gather clustering. A portal is a *place*: every member must sit within ~45 km of the highest-scoring seed **and** within a 96-hour window. Independent sources at the same site raise likelihood. Chains that hop across a continent do not count as one rift.
@@ -57,7 +58,7 @@ pip install -r requirements.txt
 python -m rift
 ```
 
-The app starts a local Flask server (default http://127.0.0.1:7860) and opens a browser to the map. Set `RIFT_NO_BROWSER=1` to skip the browser; `RIFT_PORT` to change the port; `RIFT_DEBUG=1` for Flask debug.
+The app starts a local Flask server (default http://127.0.0.1:7860) and opens a browser to the map. Set `RIFT_NO_BROWSER=1` to skip the browser; `RIFT_PORT` to change the port; `RIFT_DEBUG=1` for Flask debug. For deterministic demo/CI scans: `RIFT_WEB_INTEL=fixture`.
 
 On Windows you can also double-click `run-rift.bat` after installing deps.
 
@@ -117,7 +118,7 @@ rift/
 ├── core/
 │   ├── geo.py        # haversine, timestamps, coordinate checks
 │   ├── events.py     # Event model, persistence, scoring, corroboration
-│   ├── scanner.py    # Web intelligence + local ingest
+│   ├── scanner.py    # Web intelligence + local ingest (+ fixture provider)
 │   └── detector.py   # Site clustering + portal identification
 ├── integrations/
 │   └── judge.py      # Bridge to Wold Labs Judge
