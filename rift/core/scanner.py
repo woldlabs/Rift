@@ -4,11 +4,13 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import random
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, List
+from pathlib import Path
+from typing import Any, List, Protocol
 
 from .events import Event, score_event_text, score_text
 from .geo import utc_now_iso, valid_coords
@@ -44,6 +46,14 @@ INTERNET_TEMPLATES = [
     ("Three people independently report same impossible memory at {place}", "They all recall an extra street that has never existed. One produced a hand-drawn map that matches the others exactly."),
     ("Low-frequency 'door slam' heard across city {place}", "A deep concussive sound followed by 8 seconds of complete silence. Reported by thousands. No explosion registered."),
 ]
+
+_DEFAULT_FIXTURE = (
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "web_intel_reports.json"
+)
+
+
+class WebIntelProvider(Protocol):
+    def scan(self, count: int = 7) -> List[Event]: ...
 
 
 class WebScanner:
@@ -84,6 +94,86 @@ class WebScanner:
             ev.fracture_score = max(16.0, min(96.0, score_event_text(title, desc, source="internet")))
             events.append(ev)
         return events
+
+
+class FixtureWebScanner:
+    """Replay checked-in anomaly reports. Demo/CI only — no network I/O."""
+
+    def __init__(self, fixture_path: str | Path | None = None):
+        path = Path(fixture_path) if fixture_path else Path(
+            os.environ.get("RIFT_WEB_INTEL_FIXTURE", str(_DEFAULT_FIXTURE))
+        )
+        self.fixture_path = path
+        self._events = self._load(path)
+
+    @staticmethod
+    def _load(path: Path) -> List[Event]:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        items = raw.get("events", raw) if isinstance(raw, dict) else raw
+        if not isinstance(items, list):
+            raise ValueError(f"fixture {path} must be a list or {{events: [...]}}")
+        out: List[Event] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                lat = float(item["lat"])
+                lon = float(item["lon"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not valid_coords(lat, lon):
+                continue
+            title = str(item.get("title") or "Fixture internet event")
+            desc = str(item.get("description") or "")
+            tags = list(item.get("tags") or ["internet", "fixture"])
+            if "fixture" not in tags:
+                tags.append("fixture")
+            if "internet" not in tags:
+                tags.append("internet")
+            ev = Event(
+                id=str(item.get("id") or f"fixture-{uuid.uuid4()}"),
+                title=title,
+                description=desc,
+                lat=lat,
+                lon=lon,
+                source="internet",
+                timestamp=str(item.get("timestamp") or "2026-01-01T00:00:00Z"),
+                tags=tags,
+                meta={"provider": "fixture", "fixture_path": str(path)},
+            )
+            if item.get("fracture_score") not in (None, ""):
+                try:
+                    ev.fracture_score = float(item["fracture_score"])
+                except (TypeError, ValueError):
+                    ev.fracture_score = max(
+                        16.0, min(96.0, score_event_text(title, desc, source="internet"))
+                    )
+            else:
+                ev.fracture_score = max(
+                    16.0, min(96.0, score_event_text(title, desc, source="internet"))
+                )
+            out.append(ev)
+        if not out:
+            raise ValueError(f"fixture {path} produced zero valid events")
+        return out
+
+    def scan(self, count: int = 7) -> List[Event]:
+        count = max(1, min(30, int(count)))
+        # Deterministic slice; no shuffle, no network.
+        return list(self._events[: min(count, len(self._events))])
+
+
+def make_web_scanner(
+    provider: str | None = None,
+    *,
+    rng_seed: int | None = None,
+    fixture_path: str | Path | None = None,
+) -> WebIntelProvider:
+    """Select web-intel backend: simulated (default) or fixture (demo/CI)."""
+    name = (provider or os.environ.get("RIFT_WEB_INTEL") or "simulated").strip().lower()
+    if name in {"fixture", "fixtures"}:
+        return FixtureWebScanner(fixture_path=fixture_path)
+    return WebScanner(rng_seed=rng_seed)
 
 
 class LocalIngester:
