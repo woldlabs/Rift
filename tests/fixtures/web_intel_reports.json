@@ -1,0 +1,50 @@
+{
+  "label": "demo/CI fixture pack — not live web intel",
+  "events": [
+    {
+      "id": "fixture-seattle-rift",
+      "title": "Vertical light column reported over Seattle, WA",
+      "description": "Eyewitnesses describe a perfectly straight pillar of blue-white light lasting 3-7 minutes. No aircraft or weather explanation. Multiple independent phone videos.",
+      "lat": 47.6062,
+      "lon": -122.3321,
+      "timestamp": "2026-06-14T03:11:00Z",
+      "tags": ["internet", "visual", "fixture"]
+    },
+    {
+      "id": "fixture-la-tear",
+      "title": "Circular tear appears in sky above Los Angeles, CA",
+      "description": "A dark circular region opened for ~90 seconds. Stars visible inside the circle were wrong. Two pilots also reported it.",
+      "lat": 34.0522,
+      "lon": -118.2437,
+      "timestamp": "2026-06-14T03:20:00Z",
+      "tags": ["internet", "visual", "fixture"]
+    },
+    {
+      "id": "fixture-london-hum",
+      "title": "Low-frequency door slam heard across London, UK",
+      "description": "A deep concussive sound followed by 8 seconds of complete silence. Reported by thousands. No explosion registered.",
+      "lat": 51.5074,
+      "lon": -0.1278,
+      "timestamp": "2026-06-15T22:05:00Z",
+      "tags": ["internet", "auditory", "fixture"]
+    },
+    {
+      "id": "fixture-tokyo-glitch",
+      "title": "Mass glitch event reported downtown Tokyo, JP",
+      "description": "Hundreds of people simultaneously saw buildings flicker and a brief different skyline. Social media spiked for 11 minutes.",
+      "lat": 35.6762,
+      "lon": 139.6503,
+      "timestamp": "2026-06-16T01:40:00Z",
+      "tags": ["internet", "memory", "fixture"]
+    },
+    {
+      "id": "fixture-nyc-shimmer",
+      "title": "Portal-like shimmer observed over water near New York, NY",
+      "description": "A 4m tall rectangular distortion hovering over the surface. Reflected light behaved incorrectly. Lasted 22 minutes.",
+      "lat": 40.7128,
+      "lon": -74.006,
+      "timestamp": "2026-06-17T04:12:00Z",
+      "tags": ["internet", "portal", "fixture"]
+    }
+  ]
+}
