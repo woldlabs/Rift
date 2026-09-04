@@ -10,7 +10,7 @@ from flask import Flask, current_app, jsonify, render_template, request
 from ..core.detector import PortalDetector
 from ..core.events import Event, EventStore
 from ..core.geo import utc_now_iso, valid_coords
-from ..core.scanner import LocalIngester, WebScanner
+from ..core.scanner import LocalIngester, make_web_scanner
 from ..integrations.judge import import_judge_report, is_judge_report, prepare_for_judge
 
 
@@ -61,7 +61,7 @@ def get_store() -> EventStore:
     return current_app.extensions["rift_store"]
 
 
-def get_scanner() -> WebScanner:
+def get_scanner():
     return current_app.extensions["rift_scanner"]
 
 
@@ -78,7 +78,8 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
     path = store_path or os.environ.get("RIFT_SESSION", "rift_session.json")
     store = EventStore(path=path)
     app.extensions["rift_store"] = store
-    app.extensions["rift_scanner"] = WebScanner()
+    # RIFT_WEB_INTEL=fixture selects checked-in demo/CI replay (no network).
+    app.extensions["rift_scanner"] = make_web_scanner()
     app.extensions["rift_ingester"] = LocalIngester()
     app.extensions["rift_detector"] = PortalDetector(
         max_dist_km=45.0, min_events=2, min_avg_score=22.0, time_window_hours=96.0
@@ -109,9 +110,20 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
     def api_scan():
         data = request.get_json(silent=True) or {}
         count = max(3, min(15, int(data.get("count", 6))))
-        new_events = get_scanner().scan(count=count)
+        provider = data.get("provider")
+        if provider:
+            scanner = make_web_scanner(provider=str(provider))
+            used = str(provider).strip().lower()
+        else:
+            scanner = get_scanner()
+            used = (os.environ.get("RIFT_WEB_INTEL") or "simulated").strip().lower()
+        new_events = scanner.scan(count=count)
         added = get_store().add_many(new_events)
-        return jsonify({"added": len(added), "events": [e.to_dict() for e in added]})
+        return jsonify({
+            "added": len(added),
+            "provider": used,
+            "events": [e.to_dict() for e in added],
+        })
 
     @app.route("/api/add", methods=["POST"])
     def api_add():
