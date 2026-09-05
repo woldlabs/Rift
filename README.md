@@ -12,7 +12,7 @@ Rift ingests signals from three sources and triangulates them on geography:
 
 **Current version:** 0.2.0
 
-**Product vision / triage:** See [VISION.md](VISION.md) for purpose, non-goals, architecture boundaries, success metrics, and how Rift relates to Judge. **First-run path:** [docs/QUICKSTART.md](docs/QUICKSTART.md).
+**Product vision / triage:** See [VISION.md](VISION.md) for purpose, non-goals, architecture boundaries, success metrics, and how Rift relates to Judge. **First-run path:** [docs/QUICKSTART.md](docs/QUICKSTART.md). **Fixture smoke (no browser):** [`./scripts/fixture-smoke.sh`](scripts/fixture-smoke.sh) — demo/CI only.
 
 ## Core Features
 
