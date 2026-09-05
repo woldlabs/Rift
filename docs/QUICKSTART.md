@@ -64,7 +64,24 @@ Do not duplicate the full README novel — see those sections:
 - **Local upload** — [README Usage](../README.md#usage) / [Data Formats](../README.md#data-formats): JSON, CSV, plain text; sample events in [`examples/sample_local_events.json`](../examples/sample_local_events.json).
 - **Judge workflow** — [README Rift + Judge Workflow](../README.md#rift--judge-workflow-recommended): **EXPORT FOR JUDGE** → collect media → Judge analyze → upload report JSON back into Rift as `judge` pins.
 
-## 5. Tests
+## 5. One-command fixture smoke (no browser)
+
+SE / CI demos: prove fixture web intel without opening a browser or hitting the network.
+
+```bash
+# from repo root, after: pip install -r requirements-dev.txt
+./scripts/fixture-smoke.sh
+```
+
+Equivalent one-liner:
+
+```bash
+RIFT_WEB_INTEL=fixture RIFT_NO_BROWSER=1 python3 -m pytest -q tests/test_fixture_scanner.py
+```
+
+Fixture only — demo/CI replay of `tests/fixtures/web_intel_reports.json`. Not live web intel.
+
+## 6. Tests
 
 ```bash
 pip install -r requirements-dev.txt
