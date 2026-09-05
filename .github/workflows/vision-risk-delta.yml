@@ -1,0 +1,115 @@
+# Informational VISION theme mapping on PRs — comments/labels only (no approve/merge).
+name: VISION risk-delta
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "VISION.md"
+      - "docs/**"
+      - "rift/**"
+      - "tests/**"
+      - "examples/**"
+      - "README.md"
+      - "run-rift.sh"
+      - "run-rift.bat"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "requirements-dev.txt"
+      - ".github/workflows/tests.yml"
+      - ".github/workflows/vision-risk-delta.yml"
+      - "scripts/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  vision-risk-delta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Collect changed paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git diff --name-only "$BASE...$HEAD" > /tmp/pr-paths.txt
+          echo "Changed paths:"
+          cat /tmp/pr-paths.txt
+
+      - name: Map paths → VISION themes
+        run: |
+          set -euo pipefail
+          python3 scripts/vision_risk_delta.py --paths-file /tmp/pr-paths.txt \
+            --json > /tmp/vision-map.json
+          python3 scripts/vision_risk_delta.py --paths-file /tmp/pr-paths.txt \
+            --comment-out /tmp/vision-comment.md
+          echo "Mapping:"
+          cat /tmp/vision-map.json
+
+      - name: Upsert PR comment (idempotent)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          MARKER='<!-- rift-vision-risk-delta -->'
+          BODY_FILE=/tmp/vision-comment.md
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR}/comments" \
+            --paginate \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
+            | head -n1 || true)
+          if [ -n "${COMMENT_ID}" ]; then
+            echo "Updating comment ${COMMENT_ID}"
+            gh api --method PATCH "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              -F body=@"${BODY_FILE}"
+          else
+            echo "Creating comment"
+            gh api --method POST "repos/${{ github.repository }}/issues/${PR}/comments" \
+              -F body=@"${BODY_FILE}"
+          fi
+
+      - name: Apply existing labels only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, os, subprocess
+
+          mapped = json.load(open("/tmp/vision-map.json", encoding="utf-8"))
+          wanted = mapped.get("labels") or []
+          if not wanted:
+              print("No labels requested")
+              raise SystemExit(0)
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          pr = os.environ["PR"]
+          existing = subprocess.check_output(
+              ["gh", "label", "list", "--repo", repo, "--json", "name", "--jq", ".[].name"],
+              text=True,
+          ).splitlines()
+          existing_set = set(existing)
+          apply = [l for l in wanted if l in existing_set]
+          skip = [l for l in wanted if l not in existing_set]
+          if skip:
+              print("Skipping missing labels:", ", ".join(skip))
+          if not apply:
+              print("No existing labels to apply")
+              raise SystemExit(0)
+          subprocess.check_call(
+              ["gh", "pr", "edit", pr, "--repo", repo, "--add-label", ",".join(apply)]
+          )
+          print("Applied labels:", ", ".join(apply))
+          PY

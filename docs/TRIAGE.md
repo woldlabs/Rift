@@ -20,3 +20,8 @@ Use this checklist when reviewing PRs or issues against [VISION.md](../VISION.md
 ## Labels (suggested)
 
 `needs-vision-review` · `docs` · `schema-risk` (if Judge bridge) · `architecture`
+
+## VISION risk-delta Action
+
+On PRs that touch Rift code/docs/CI paths, [`.github/workflows/vision-risk-delta.yml`](../.github/workflows/vision-risk-delta.yml) posts **one** idempotent comment mapping touched paths → existing [VISION.md](../VISION.md) headings (links only; no invented north-star text). It may add **existing** labels only (`docs`, `needs-vision-review` when present). **No** approve / request-changes / merge from this workflow. Mapper: [`scripts/vision_risk_delta.py`](../scripts/vision_risk_delta.py).
+
