@@ -30,3 +30,8 @@ Shared-bot accounts that cannot APPROVE their own PRs still post COMMENT; a huma
 ## Comments & labels only until human merge
 
 Bots: comments and labels only. No merges from eng bots.
+
+## Automated risk-delta comment
+
+PRs may receive an informational VISION risk-delta comment (path → VISION heading links). See [TRIAGE.md](TRIAGE.md#vision-risk-delta-action). Still comments/labels only until human merge.
+
