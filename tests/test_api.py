@@ -102,3 +102,37 @@ def test_stats_and_clear(client):
     assert "by_source" in stats
     cleared = client.post("/api/clear").get_json()
     assert cleared["remaining"] >= 1
+
+
+def test_scan_missing_fixture_is_400(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("RIFT_WEB_INTEL_FIXTURE", str(tmp_path / "missing.json"))
+    res = client.post("/api/scan", json={"provider": "fixture", "count": 3})
+    assert res.status_code == 400
+    assert "fixture" in (res.get_json().get("error") or "").lower()
+
+
+def test_scan_fixture_provider(client):
+    res = client.post("/api/scan", json={"provider": "fixture", "count": 3})
+    body = res.get_json()
+    assert res.status_code == 200
+    assert body["provider"] == "fixture"
+    assert body["added"] == 3
+    assert all(e["source"] == "internet" for e in body["events"])
+    assert any("fixture" in (e.get("tags") or []) for e in body["events"])
+
+
+def test_bad_query_params_and_source(client):
+    bad_score = client.get("/api/events?min_score=nope")
+    assert bad_score.status_code == 400
+    bad_count = client.post("/api/scan", json={"count": "x"})
+    assert bad_count.status_code == 400
+    bad_src = client.post("/api/add", json={"title": "x", "lat": 1, "lon": 2, "source": "twitter"})
+    assert bad_src.status_code == 400
+
+
+def test_index_template_shipped():
+    from pathlib import Path
+    from rift.web import app as webapp
+
+    template = Path(webapp.__file__).parent / "templates" / "index.html"
+    assert template.is_file()
