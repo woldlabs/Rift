@@ -108,6 +108,11 @@ class FixtureWebScanner:
 
     @staticmethod
     def _load(path: Path) -> List[Event]:
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"web-intel fixture not found: {path} "
+                "(demo/CI only; run from a Rift checkout or set RIFT_WEB_INTEL_FIXTURE)"
+            )
         raw = json.loads(path.read_text(encoding="utf-8"))
         items = raw.get("events", raw) if isinstance(raw, dict) else raw
         if not isinstance(items, list):

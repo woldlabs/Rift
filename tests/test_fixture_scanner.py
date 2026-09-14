@@ -38,3 +38,12 @@ def test_make_web_scanner_default_simulated(monkeypatch):
     from rift.core.scanner import WebScanner
 
     assert isinstance(sc, WebScanner)
+
+
+def test_missing_fixture_is_explicit(tmp_path):
+    missing = tmp_path / "nope.json"
+    try:
+        FixtureWebScanner(fixture_path=missing)
+        assert False, "expected FileNotFoundError"
+    except FileNotFoundError as exc:
+        assert "RIFT_WEB_INTEL_FIXTURE" in str(exc)

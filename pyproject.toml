@@ -19,12 +19,16 @@ dev = ["pytest>=7.4"]
 [project.urls]
 Homepage = "https://github.com/woldlabs/Rift"
 Repository = "https://github.com/woldlabs/Rift"
+Issues = "https://github.com/woldlabs/Rift/issues"
 
 [project.scripts]
 rift = "rift.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["rift*"]
+
+[tool.setuptools.package-data]
+"rift.web" = ["templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

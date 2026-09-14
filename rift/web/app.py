@@ -13,6 +13,30 @@ from ..core.geo import utc_now_iso, valid_coords
 from ..core.scanner import LocalIngester, make_web_scanner
 from ..integrations.judge import import_judge_report, is_judge_report, prepare_for_judge
 
+KNOWN_SOURCES = {"internet", "local", "user", "judge"}
+
+
+def _parse_float(value, *, default: float | None = None, name: str = "value"):
+    if value in (None, ""):
+        if default is None:
+            raise ValueError(f"{name} is required")
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number") from exc
+
+
+def _parse_int(value, *, default: int | None = None, name: str = "value"):
+    if value in (None, ""):
+        if default is None:
+            raise ValueError(f"{name} is required")
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+
 
 def _ensure_seed(store: EventStore) -> None:
     if store.get_all():
@@ -94,10 +118,15 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
     @app.route("/api/events", methods=["GET"])
     def api_events():
         source = request.args.get("source")
-        min_score = float(request.args.get("min_score", 0) or 0)
+        try:
+            min_score = _parse_float(request.args.get("min_score", 0) or 0, default=0.0, name="min_score")
+            since = request.args.get("since_hours")
+            since_hours = (
+                None if since in (None, "", "0") else _parse_float(since, name="since_hours")
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         q = request.args.get("q", "")
-        since = request.args.get("since_hours")
-        since_hours = float(since) if since not in (None, "", "0") else None
         events = get_store().filter(
             source=source or None, min_score=min_score, query=q, since_hours=since_hours
         )
@@ -109,15 +138,21 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
     @app.route("/api/scan", methods=["POST"])
     def api_scan():
         data = request.get_json(silent=True) or {}
-        count = max(3, min(15, int(data.get("count", 6))))
+        try:
+            count = max(3, min(15, _parse_int(data.get("count", 6), default=6, name="count")))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         provider = data.get("provider")
-        if provider:
-            scanner = make_web_scanner(provider=str(provider))
-            used = str(provider).strip().lower()
-        else:
-            scanner = get_scanner()
-            used = (os.environ.get("RIFT_WEB_INTEL") or "simulated").strip().lower()
-        new_events = scanner.scan(count=count)
+        try:
+            if provider:
+                scanner = make_web_scanner(provider=str(provider))
+                used = str(provider).strip().lower()
+            else:
+                scanner = get_scanner()
+                used = (os.environ.get("RIFT_WEB_INTEL") or "simulated").strip().lower()
+            new_events = scanner.scan(count=count)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            return jsonify({"error": f"scan failed: {exc}"}), 400
         added = get_store().add_many(new_events)
         return jsonify({
             "added": len(added),
@@ -138,6 +173,9 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
             return jsonify({"error": "lat and lon must be valid numbers"}), 400
         if not valid_coords(lat, lon):
             return jsonify({"error": "lat must be -90..90, lon must be -180..180"}), 400
+        source = str(data.get("source", "user") or "user").strip().lower()
+        if source not in KNOWN_SOURCES:
+            return jsonify({"error": "source must be internet, local, user, or judge"}), 400
 
         ev = Event(
             id=str(uuid.uuid4()),
@@ -145,7 +183,7 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
             description=str(data.get("description", ""))[:2000],
             lat=round(lat, 6),
             lon=round(lon, 6),
-            source=data.get("source", "user"),
+            source=source,
             timestamp=data.get("timestamp") or utc_now_iso(),
             tags=[str(t) for t in data.get("tags", ["user"]) if str(t).strip()],
         )
@@ -174,8 +212,19 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
                     return jsonify({"error": f"invalid json: {je}"}), 400
 
                 if is_judge_report(parsed):
-                    lat = float(request.form.get("default_lat") or request.args.get("default_lat") or 40.71)
-                    lon = float(request.form.get("default_lon") or request.args.get("default_lon") or -74.0)
+                    try:
+                        lat = _parse_float(
+                            request.form.get("default_lat") or request.args.get("default_lat"),
+                            default=40.71,
+                            name="default_lat",
+                        )
+                        lon = _parse_float(
+                            request.form.get("default_lon") or request.args.get("default_lon"),
+                            default=-74.0,
+                            name="default_lon",
+                        )
+                    except ValueError as exc:
+                        return jsonify({"error": str(exc)}), 400
                     events = import_judge_report(parsed, default_lat=lat, default_lon=lon)
                 else:
                     events = get_ingester().ingest_json(parsed)
@@ -198,8 +247,11 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
             data = request.get_json(silent=True)
             if not data:
                 return jsonify({"error": "no file or json body"}), 400
-            lat = float(request.args.get("default_lat", 40.71))
-            lon = float(request.args.get("default_lon", -74.0))
+            try:
+                lat = _parse_float(request.args.get("default_lat"), default=40.71, name="default_lat")
+                lon = _parse_float(request.args.get("default_lon"), default=-74.0, name="default_lon")
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
             try:
                 new_evs = import_judge_report(data, default_lat=lat, default_lon=lon)
             except Exception as exc:
@@ -209,8 +261,19 @@ def create_app(store_path: str | None = None, seed: bool = True) -> Flask:
 
         f = request.files["file"]
         content = f.read()
-        lat = float(request.form.get("default_lat") or request.args.get("default_lat") or 40.71)
-        lon = float(request.form.get("default_lon") or request.args.get("default_lon") or -74.0)
+        try:
+            lat = _parse_float(
+                request.form.get("default_lat") or request.args.get("default_lat"),
+                default=40.71,
+                name="default_lat",
+            )
+            lon = _parse_float(
+                request.form.get("default_lon") or request.args.get("default_lon"),
+                default=-74.0,
+                name="default_lon",
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         try:
             new_evs = import_judge_report(content, default_lat=lat, default_lon=lon)
         except Exception as exc:
