@@ -28,3 +28,16 @@ jobs:
         run: pytest -q
         env:
           RIFT_NO_BROWSER: "1"
+
+  hold-banner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: HOLD banner + 1.x.x grep (Rift #12 hygiene)
+        run: |
+          test -f README.md
+          grep -q "HOLD (pre-1.x.x)" README.md
+          grep -q "1.x.x" README.md
+          grep -q "HOLD" README.md
+          echo "ok: HOLD banner + 1.x.x present"
+
